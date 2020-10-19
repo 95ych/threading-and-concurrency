@@ -14,11 +14,11 @@ int exitt;
 int success_per[BUF], zonepharma[BUF];// success percentage, zonepharma->the pharma id dist. to given zone 
 int vaccinesinzone[BUF], slots[BUF];  // vaccines in each zone and slots in each zone
 int vac_start[BUF]; // vaccination success or fail for student i;
-int student_wait;
+int student_wait;  // denotes no. of students waiting for slots
 pthread_t pharma_th[BUF], zone_th[BUF], student_th[BUF]; // threads for pharma, zone, student
-pthread_mutex_t dispatch_to_zone_lock[BUF]; // lock pharma and table relation 
-pthread_mutex_t student_zone_lock[BUF];   // zone lock 
-pthread_mutex_t student_wait_lock =PTHREAD_MUTEX_INITIALIZER; //initialise mutex lock
+pthread_mutex_t dispatch_to_zone_lock[BUF]; // lock for dispatching vaccines to zone;
+pthread_mutex_t student_zone_lock[BUF];   // zone's  number of slots lock 
+pthread_mutex_t student_wait_lock =PTHREAD_MUTEX_INITIALIZER; //initialise mutex lock for no. of students waiting counter
 
 
 void *pharma(void *index){
@@ -54,15 +54,15 @@ void *pharma(void *index){
 
 void *zone_maintain(void *index){
 	int in = *((int*)index);
-	pthread_mutex_trylock(&student_zone_lock[in]);
+	pthread_mutex_trylock(&student_zone_lock[in]); //lock the slots, i.e. dont start allocation.
 	while(!exitt){
 
         while(vaccinesinzone[in] == 0);           //wait for vaccines to arrive
-        vac_start[in]=0;     
+        vac_start[in]=0;                          //vaccination phase not started (its a flag)  
 		slots[in] = min(vaccinesinzone[in],(rand()%8)+1);     //generate slots    
 		printf("%d slots are available in zone[%d]\n",slots[in], in);
 		pthread_mutex_unlock(&student_zone_lock[in]);		// unlock for allocation for students
-		int s = slots[in];       
+		int s = slots[in];                                 //s is total no. of slots allocated
 	    
 	    while((slots[in]!=0 && student_wait)|| slots[in]==s){ 				       //wait till all slots get occupied or till no students are waiting with atleast one slot occupied
 	    	if(!slots[in]) break;
@@ -71,7 +71,7 @@ void *zone_maintain(void *index){
 	    		break;
 	    }
 	    
-	    pthread_mutex_trylock(&student_zone_lock[in]);   // stop allocation of slots and vaccination phase;
+	    pthread_mutex_trylock(&student_zone_lock[in]);   // stop allocation of slots and enter vaccination phase;
 	    printf("Zone[%d] is entering vaccination phase\n", in);
 	    vac_start[in]=1;
 	    vaccinesinzone[in] -= s; 		    	  // vaccines got reduced in vaccination phase;
@@ -94,10 +94,10 @@ void *student_allocation(void *index)
 	int flag=1;
 	while(vaccinated < 3){                   // to get vaccinated atmost 3 times till success
 		printf("Student[%d] is waiting to be allocated for his/her round %d \n", id, vaccinated+1);
-		pthread_mutex_trylock(&student_wait_lock);
-		student_wait++;
+		pthread_mutex_trylock(&student_wait_lock);  // lock for no. of students waiting
+		student_wait++;                     
 		pthread_mutex_unlock(&student_wait_lock);
-		flag=1;
+		flag=1;         // flag denotes whether student is allocated previously or not (0 if yes)
 		while(flag){
 			fri(0,m){
 				if(!pthread_mutex_trylock(&student_zone_lock[i])){  //searching zones
@@ -112,10 +112,10 @@ void *student_allocation(void *index)
 					pthread_mutex_unlock(&student_wait_lock);
 					while(!vac_start[i]); 	                       // wait for start of vaccination phase
 					//printf(" vac stsrt %d\n",vac_start[i]);
-					int success = rand()%101;
+					int success = rand()%101;                       // generate random number to determine success or failure
 					vaccinated++;
 					sleep(0.2);
-					if (success<=success_per[zonepharma[i]]){
+					if (success<=success_per[zonepharma[i]]){       //comparing random number with probability whether success or not
 						printf("Vaccination of student[%d] is successfull :), he/she can attend college :)\n",id);	
 						vac_success=1;
 					}
